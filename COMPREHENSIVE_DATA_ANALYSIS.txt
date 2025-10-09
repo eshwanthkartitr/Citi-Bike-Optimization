@@ -1,0 +1,71 @@
+2025-10-06 12:09:00 - __main__ - INFO - 🚲 Loading comprehensive Citi-Bike data from all months...
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202507-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202505-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202503-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202501-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202506-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202504-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO -   📁 Found: JC-202502-citibike-tripdata.csv
+2025-10-06 12:09:00 - __main__ - INFO - 📊 Found 7 monthly data files
+2025-10-06 12:09:00 - __main__ - INFO -   ✅ Loaded JC-202501-citibike-tripdata.csv: 50,592 trips
+2025-10-06 12:09:01 - __main__ - INFO -   ✅ Loaded JC-202502-citibike-tripdata.csv: 45,249 trips
+2025-10-06 12:09:02 - __main__ - INFO -   ✅ Loaded JC-202503-citibike-tripdata.csv: 73,282 trips
+2025-10-06 12:09:03 - __main__ - INFO -   ✅ Loaded JC-202504-citibike-tripdata.csv: 81,531 trips
+2025-10-06 12:09:05 - __main__ - INFO -   ✅ Loaded JC-202505-citibike-tripdata.csv: 93,199 trips
+2025-10-06 12:09:06 - __main__ - INFO -   ✅ Loaded JC-202506-citibike-tripdata.csv: 96,735 trips
+2025-10-06 12:09:08 - __main__ - INFO -   ✅ Loaded JC-202507-citibike-tripdata.csv: 107,391 trips
+2025-10-06 12:09:08 - __main__ - INFO - ✅ Total trips loaded: 547,979
+
+================================================================================
+📊 COMPREHENSIVE DATA ANALYSIS (January - July 2025)
+================================================================================
+
+✅ Total Trips: 547,979
+✅ Total Stations: 359
+✅ Stations with Surplus: 304
+✅ Stations with Deficit: 55
+✅ Total Surplus Bikes: 6698
+✅ Total Deficit Bikes: 7650
+
+🔥 TOP 10 BUSIEST STATIONS:
+  1. Grove St PATH                            - 50,998 trips
+  2. Hoboken Terminal - River St & Hudson Pl  - 34,878 trips
+  3. Hoboken Terminal - Hudson St & Hudson Pl - 27,486 trips
+  4. Hamilton Park                            - 24,765 trips
+  5. City Hall - Washington St & 1 St         - 23,476 trips
+  6. Newport PATH                             - 22,839 trips
+  7. Bergen Ave & Sip Ave                     - 22,705 trips
+  8. Exchange Pl                              - 22,332 trips
+  9. Newport Pkwy                             - 21,482 trips
+  10. 11 St & Washington St                    - 20,995 trips
+
+🔵 TOP 10 SURPLUS STATIONS (Need to Send Bikes):
+  1. Grove St PATH                            - Surplus: +2,016 bikes
+  2. Hoboken Terminal - River St & Hudson Pl  - Surplus: +1,270 bikes
+  3. Hoboken Terminal - Hudson St & Hudson Pl - Surplus: +660 bikes
+  4. Vesey Pl & River Terrace                 - Surplus: +230 bikes
+  5. Exchange Pl                              - Surplus: +128 bikes
+  6. 9 St HBLR - Jackson St & 8 St            - Surplus: +115 bikes
+  7. Hoboken Ave at Monmouth St               - Surplus: +114 bikes
+  8. North Moore St & Greenwich St            - Surplus: +113 bikes
+  9. City Hall - Washington St & 1 St         - Surplus: +94 bikes
+  10. Clinton St & 7 St                        - Surplus: +71 bikes
+
+🔴 TOP 10 DEFICIT STATIONS (Need to Receive Bikes):
+  1. Oakland Ave                              - Deficit: -888 bikes
+  2. McGinley Square                          - Deficit: -657 bikes
+  3. Glenwood Ave                             - Deficit: -439 bikes
+  4. Fairmount Ave                            - Deficit: -433 bikes
+  5. Leonard Gordon Park                      - Deficit: -322 bikes
+  6. Hilltop                                  - Deficit: -308 bikes
+  7. Newark St & Washington St                - Deficit: -303 bikes
+  8. Madison St & 1 St                        - Deficit: -264 bikes
+  9. River St & 1 St                          - Deficit: -260 bikes
+  10. Brunswick St                             - Deficit: -256 bikes
+
+⏰ PEAK HOURS:
+  17:00-18:00: 55,673 trips
+  18:00-19:00: 52,113 trips
+  08:00-09:00: 40,126 trips
+
+================================================================================

@@ -1,0 +1,43 @@
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.3
+scipy==1.11.4
+
+# Optimization
+pulp==2.7.0
+ortools==9.8.3296
+
+# Machine Learning
+scikit-learn==1.4.0
+prophet==1.1.5
+statsmodels==0.14.1
+
+# Database
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+redis==5.0.1
+
+# Utilities
+python-dotenv==1.0.0
+pytz==2023.3.post1
+geopy==2.4.1
+
+# API and HTTP
+httpx==0.26.0
+requests==2.31.0
+
+# Monitoring
+prometheus-client==0.19.0
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+geopy
