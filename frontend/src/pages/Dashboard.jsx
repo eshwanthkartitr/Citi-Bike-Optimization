@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react'
 import StationMap from '../components/StationMap'
 import KPICards from '../components/KPICards'
 import AlertPanel from '../components/AlertPanel'
+import ClusteringOverlay from '../components/ClusteringOverlay'
+import ParameterTuning from '../components/ParameterTuning'
+import { OptimizationResultSkeleton } from '../components/LoadingSkeletons'
 import { useOptimizationStore } from '../store/optimizationStore'
-import { Play, Loader, SlidersHorizontal } from 'lucide-react'
+import { Play, Loader, SlidersHorizontal, Layers } from 'lucide-react'
 
 const algorithmOptions = [
   {
@@ -40,7 +43,9 @@ const mapBackendStations = (rawStations) => {
     surplus_deficit: station.surplus_deficit,
     priority: station.priority || 'LOW',
     total_arrivals: station.total_arrivals ?? 0,
-    total_departures: station.total_departures ?? 0
+    total_departures: station.total_departures ?? 0,
+    before_optimization_bikes: station.before_optimization_bikes ?? station.current_bikes,
+    after_optimization_bikes: station.after_optimization_bikes ?? station.current_bikes
   }))
 }
 
@@ -49,7 +54,11 @@ const applyMovesToStations = (currentStations, moves) => {
 
   const lookup = new Map()
   currentStations.forEach((station) => {
-    lookup.set(station.id, { ...station })
+    lookup.set(station.id, {
+      ...station,
+      before_optimization_bikes: station.before_optimization_bikes ?? station.current_bikes,
+      after_optimization_bikes: station.after_optimization_bikes ?? station.current_bikes
+    })
   })
 
   moves.forEach((move) => {
@@ -57,15 +66,23 @@ const applyMovesToStations = (currentStations, moves) => {
     const toStation = lookup.get(move.to_station_id)
 
     if (fromStation) {
+      if (fromStation.before_optimization_bikes === undefined) {
+        fromStation.before_optimization_bikes = fromStation.current_bikes
+      }
       const bikesAfter = Math.max(0, fromStation.current_bikes - move.bikes_moved)
       fromStation.current_bikes = bikesAfter
       fromStation.surplus_deficit = fromStation.surplus_deficit - move.bikes_moved
+      fromStation.after_optimization_bikes = bikesAfter
     }
 
     if (toStation) {
+      if (toStation.before_optimization_bikes === undefined) {
+        toStation.before_optimization_bikes = toStation.current_bikes
+      }
       const bikesAfter = Math.min(toStation.capacity, toStation.current_bikes + move.bikes_moved)
       toStation.current_bikes = bikesAfter
       toStation.surplus_deficit = toStation.surplus_deficit + move.bikes_moved
+      toStation.after_optimization_bikes = bikesAfter
     }
   })
 
@@ -79,6 +96,10 @@ export default function Dashboard() {
   const [optimizationResult, setOptimizationResult] = useState(null)
   const [mapMoves, setMapMoves] = useState([])
   const [selectedAlgorithm, setSelectedAlgorithm] = useState('greedy')
+  const [showParameterTuning, setShowParameterTuning] = useState(false)
+  const [showClustering, setShowClustering] = useState(false)
+  const [customParameters, setCustomParameters] = useState(null)
+  const [initialKpisCalculated, setInitialKpisCalculated] = useState(false)
   const { kpis } = useOptimizationStore()
   const selectedAlgorithmMeta = algorithmOptions.find((option) => option.value === selectedAlgorithm)
 
@@ -88,6 +109,7 @@ export default function Dashboard() {
       try {
         setLoading(true)
         await fetchStations()
+        await fetchInitialKPIs()
       } catch (error) {
         console.error('Failed to load dashboard data:', error)
       } finally {
@@ -97,7 +119,7 @@ export default function Dashboard() {
     loadData()
   }, [])
   
-  // Calculate KPIs from real station data or optimization results
+  // Update KPIs from optimization results
   useEffect(() => {
     if (optimizationResult) {
       // Update KPIs from optimization results
@@ -109,26 +131,8 @@ export default function Dashboard() {
           fairnessScore: optimizationResult.fairness_score
         }
       })
-    } else if (stations.length > 0) {
-      const totalDeficit = stations
-        .filter(s => s.surplus_deficit < 0)
-        .reduce((sum, s) => sum + Math.abs(s.surplus_deficit), 0)
-      
-      const totalSurplus = stations
-        .filter(s => s.surplus_deficit > 0)
-        .reduce((sum, s) => sum + s.surplus_deficit, 0)
-      
-      // Update KPIs before optimization
-      useOptimizationStore.setState({
-        kpis: {
-          totalCost: 0, // Will be calculated after optimization
-          stationsServed: stations.length,
-          bikesRebalanced: Math.min(totalDeficit, totalSurplus),
-          fairnessScore: 0 // Will be calculated after optimization
-        }
-      })
     }
-  }, [stations, optimizationResult])
+  }, [optimizationResult])
 
   const runOptimization = async () => {
     try {
@@ -136,14 +140,22 @@ export default function Dashboard() {
       setMapMoves([])
       console.log(`🚀 Starting optimization using ${selectedAlgorithm} algorithm...`)
       
+      // Build request body with custom parameters if available
+      const requestBody = {
+        algorithms: [selectedAlgorithm],
+        constraints: {}
+      }
+
+      // Add custom parameters if tuning was used
+      if (customParameters) {
+        requestBody.custom_parameters = customParameters
+      }
+      
       // Use selected algorithm; comparison endpoint returns consistent shape
       const response = await fetch('http://localhost:8000/api/compare/compare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          algorithms: [selectedAlgorithm],
-          constraints: {}
-        })
+        body: JSON.stringify(requestBody)
       })
       
       if (!response.ok) {
@@ -187,7 +199,9 @@ export default function Dashboard() {
       surplus_deficit: station.surplus_deficit,
       priority: station.priority || 'LOW',
       total_arrivals: station.total_arrivals ?? 0,
-      total_departures: station.total_departures ?? 0
+      total_departures: station.total_departures ?? 0,
+      before_optimization_bikes: station.before_optimization_bikes ?? station.current_bikes,
+      after_optimization_bikes: station.after_optimization_bikes ?? station.current_bikes
     }))
   }
 
@@ -196,7 +210,11 @@ export default function Dashboard() {
 
     const lookup = new Map()
     currentStations.forEach((station) => {
-      lookup.set(station.id, { ...station })
+      lookup.set(station.id, {
+        ...station,
+        before_optimization_bikes: station.before_optimization_bikes ?? station.current_bikes,
+        after_optimization_bikes: station.after_optimization_bikes ?? station.current_bikes
+      })
     })
 
     moves.forEach((move) => {
@@ -204,15 +222,23 @@ export default function Dashboard() {
       const toStation = lookup.get(move.to_station_id)
 
       if (fromStation) {
+        if (fromStation.before_optimization_bikes === undefined) {
+          fromStation.before_optimization_bikes = fromStation.current_bikes
+        }
         const bikesAfter = Math.max(0, fromStation.current_bikes - move.bikes_moved)
         fromStation.current_bikes = bikesAfter
         fromStation.surplus_deficit = Math.max(-fromStation.capacity, fromStation.surplus_deficit - move.bikes_moved)
+        fromStation.after_optimization_bikes = bikesAfter
       }
 
       if (toStation) {
+        if (toStation.before_optimization_bikes === undefined) {
+          toStation.before_optimization_bikes = toStation.current_bikes
+        }
         const bikesAfter = Math.min(toStation.capacity, toStation.current_bikes + move.bikes_moved)
         toStation.current_bikes = bikesAfter
         toStation.surplus_deficit = Math.min(toStation.capacity, toStation.surplus_deficit + move.bikes_moved)
+        toStation.after_optimization_bikes = bikesAfter
       }
     })
 
@@ -242,7 +268,9 @@ export default function Dashboard() {
         surplus_deficit: station.surplus_deficit,
         priority: station.priority,
         total_arrivals: station.total_arrivals,
-        total_departures: station.total_departures
+        total_departures: station.total_departures,
+        before_optimization_bikes: station.current_bikes,
+        after_optimization_bikes: station.current_bikes
       }))
       
       setStations(mappedStations)
@@ -255,12 +283,45 @@ export default function Dashboard() {
     }
   }
 
+  const fetchInitialKPIs = async () => {
+    try {
+      console.log('Fetching consistent initial KPIs from API...')
+      const response = await fetch('http://localhost:8000/api/stats/kpis')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const result = await response.json()
+      console.log(`✅ Loaded consistent KPIs:`, result.data)
+      
+      // Set initial KPIs from backend (consistent across all page loads)
+      useOptimizationStore.setState({
+        kpis: {
+          totalCost: result.data.total_cost,
+          stationsServed: result.data.stations_served,
+          bikesRebalanced: result.data.bikes_rebalanced,
+          fairnessScore: result.data.fairness_score
+        }
+      })
+      
+      setInitialKpisCalculated(true)
+    } catch (error) {
+      console.error('Failed to fetch initial KPIs:', error)
+      // Fallback to 0 values
+      useOptimizationStore.setState({
+        kpis: {
+          totalCost: 0,
+          stationsServed: 0,
+          bikesRebalanced: 0,
+          fairnessScore: 0
+        }
+      })
+    }
+  }
+
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
-      </div>
-    )
+    return <OptimizationResultSkeleton />
   }
 
   return (
@@ -304,6 +365,26 @@ export default function Dashboard() {
           </div>
 
           <button
+            onClick={() => setShowParameterTuning(!showParameterTuning)}
+            className={`btn flex items-center gap-2 px-4 py-3 ${
+              showParameterTuning ? 'bg-blue-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+            Tune Parameters
+          </button>
+
+          <button
+            onClick={() => setShowClustering(!showClustering)}
+            className={`btn flex items-center gap-2 px-4 py-3 ${
+              showClustering ? 'bg-purple-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Layers className="h-5 w-5" />
+            Analysis
+          </button>
+
+          <button
             onClick={runOptimization}
             disabled={optimizing || stations.length === 0}
             className="btn btn-primary flex items-center gap-2 px-6 py-3"
@@ -322,6 +403,19 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* Parameter Tuning Panel */}
+      {showParameterTuning && (
+        <ParameterTuning
+          algorithm={selectedAlgorithm}
+          onParametersChange={(params) => {
+            setCustomParameters(params)
+            setShowParameterTuning(false)
+            // Automatically trigger optimization with new parameters
+            setTimeout(() => runOptimization(), 100)
+          }}
+        />
+      )}
 
       {/* Optimization Results Banner */}
       {optimizationResult && (
@@ -372,9 +466,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map - Takes 2 columns */}
         <div className="lg:col-span-2">
-          <div className="card h-[600px]">
+          <div className="card h-[675px]">
             <h3 className="text-lg font-semibold mb-4">Station Map</h3>
-            <StationMap stations={stations} moves={mapMoves} />
+            <div className="h-[600px]">
+              <StationMap style="height:90%" stations={stations} moves={mapMoves}>
+                <ClusteringOverlay style="width:10px"stations={stations} enabled={showClustering} />
+              </StationMap>
+            </div>
+            
           </div>
         </div>
 

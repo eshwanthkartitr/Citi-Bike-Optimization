@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet-routing-machine'
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'
 
 // Create custom icons using DivIcon for better control
 const createStationIcon = (station, options = {}) => {
@@ -76,7 +78,17 @@ const vehicleIcons = {
   })
 }
 
-export default function StationMap({ stations, moves = [] }) {
+const getMoveKey = (move, idx) => `${move.from_station_id}-${move.to_station_id}-${idx}`
+
+const getVehicleColor = (move) => {
+  if (!move) return '#3B82F6'
+  if (move.vehicle_type === 'box_truck') return '#EF4444'
+  if (move.vehicle_type === 'light_truck') return '#3B82F6'
+  if (move.vehicle_type === 'mini_van') return '#10B981'
+  return '#6366F1'
+}
+
+export default function StationMap({ stations, moves = [], children }) {
   // Center on Jersey City/Hoboken (where the real data is)
   const center = [40.7281, -74.0776] // Jersey City center
 
@@ -84,6 +96,8 @@ export default function StationMap({ stations, moves = [] }) {
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState('idle')
   const [isAnimating, setIsAnimating] = useState(false)
+  const [routeCache, setRouteCache] = useState({})
+  const routeCacheRef = useRef(routeCache)
 
   // Lookup map for station data
   const stationLookup = useMemo(() => {
@@ -93,6 +107,28 @@ export default function StationMap({ stations, moves = [] }) {
     })
     return lookup
   }, [stations])
+
+  useEffect(() => {
+    routeCacheRef.current = routeCache
+  }, [routeCache])
+
+  useEffect(() => {
+    if (!moves || moves.length === 0) {
+      setRouteCache({})
+      return
+    }
+
+    setRouteCache((prev) => {
+      const validKeys = new Set(moves.map((move, idx) => getMoveKey(move, idx)))
+      const next = {}
+      validKeys.forEach((key) => {
+        if (prev[key]) {
+          next[key] = prev[key]
+        }
+      })
+      return next
+    })
+  }, [moves])
 
   useEffect(() => {
     if (!moves || moves.length === 0) {
@@ -156,13 +192,130 @@ export default function StationMap({ stations, moves = [] }) {
     name: currentMove.to_station_name
   }) : null
 
+  useEffect(() => {
+    if (!moves || moves.length === 0) return
+
+    let isCancelled = false
+    const timeouts = []
+
+    const fetchRouteWithRetry = async (move, idx, key, from, to, retryCount = 0) => {
+      if (isCancelled) return
+
+      try {
+        // OpenRouteService API - more reliable than public OSRM
+        const apiKey = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImIwYWIxN2RlZTEzZjRhODliZjk1NzlmZjcwOTcxYTEzIiwiaCI6Im11cm11cjY0In0='
+        
+        const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${from.lng},${from.lat}&end=${to.lng},${to.lat}`
+        
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
+          }
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
+
+        const data = await response.json()
+        
+        if (!data.features || data.features.length === 0) {
+          throw new Error('No routes found')
+        }
+
+        const coords = data.features[0].geometry.coordinates
+        if (!coords || coords.length === 0) {
+          throw new Error('No coordinates in route')
+        }
+
+        // Convert [lng, lat] to [lat, lng] for Leaflet
+        const latLngs = coords.map(([lng, lat]) => [lat, lng])
+
+        setRouteCache((prev) => {
+          if (prev[key]) return prev
+          const next = { ...prev, [key]: latLngs }
+          routeCacheRef.current = next
+          return next
+        })
+
+        console.log(`✅ Route ${idx + 1} loaded successfully (${latLngs.length} points)`)
+
+      } catch (error) {
+        // Retry with exponential backoff
+        if (retryCount < 2) {
+          const retryDelay = Math.pow(2, retryCount) * 1000 // 1s, 2s, 4s
+          console.log(`⚠️ Route ${idx + 1} failed (${error.message}), retrying in ${retryDelay}ms (attempt ${retryCount + 2}/3)`)
+          
+          const retryTimeoutId = setTimeout(() => {
+            fetchRouteWithRetry(move, idx, key, from, to, retryCount + 1)
+          }, retryDelay)
+          
+          timeouts.push(retryTimeoutId)
+          return
+        }
+        
+        console.warn(`❌ Route ${idx + 1} failed after 3 attempts, using straight line fallback`)
+      }
+    }
+
+    moves.forEach((move, idx) => {
+      const key = getMoveKey(move, idx)
+      if (routeCacheRef.current[key]) return
+
+      const from = stationLookup.get(move.from_station_id) || (move.from_lat && move.from_lng ? { lat: move.from_lat, lng: move.from_lng } : null)
+      const to = stationLookup.get(move.to_station_id) || (move.to_lat && move.to_lng ? { lat: move.to_lat, lng: move.to_lng } : null)
+
+      if (!from || !to) return
+
+      // Stagger requests with 500ms delay (OpenRouteService has better rate limits)
+      const timeoutId = setTimeout(() => {
+        fetchRouteWithRetry(move, idx, key, from, to, 0)
+      }, idx * 500)
+
+      timeouts.push(timeoutId)
+    })
+
+    return () => {
+      isCancelled = true
+      timeouts.forEach((id) => clearTimeout(id))
+    }
+  }, [moves, stationLookup])
+
   const vehiclePosition = useMemo(() => {
-    if (!currentMove || !fromStation || !toStation) return null
-    const ratio = Math.min(1, Math.max(0, progress / 100))
-    const lat = fromStation.lat + (toStation.lat - fromStation.lat) * ratio
-    const lng = fromStation.lng + (toStation.lng - fromStation.lng) * ratio
-    return [lat, lng]
-  }, [currentMove, fromStation, toStation, progress])
+    if (!currentMove || (!fromStation && !toStation)) return null
+    const key = currentMove ? getMoveKey(currentMove, activeMoveIndex) : null
+    const routePoints = key ? routeCache[key] : null
+
+    if (routePoints && routePoints.length > 0) {
+      const ratio = Math.min(1, Math.max(0, progress / 100))
+      if (routePoints.length === 1) {
+        return routePoints[0]
+      }
+
+      const totalSegments = routePoints.length - 1
+      const scaled = ratio * totalSegments
+      const segmentIndex = Math.min(totalSegments - 1, Math.floor(scaled))
+      const segmentRatio = scaled - segmentIndex
+
+      const start = routePoints[segmentIndex]
+      const end = routePoints[segmentIndex + 1] || start
+
+      return [
+        start[0] + (end[0] - start[0]) * segmentRatio,
+        start[1] + (end[1] - start[1]) * segmentRatio
+      ]
+    }
+
+    if (fromStation && toStation) {
+      const ratio = Math.min(1, Math.max(0, progress / 100))
+      const lat = fromStation.lat + (toStation.lat - fromStation.lat) * ratio
+      const lng = fromStation.lng + (toStation.lng - fromStation.lng) * ratio
+      return [lat, lng]
+    }
+
+    return null
+  }, [currentMove, fromStation, toStation, progress, routeCache, activeMoveIndex])
 
   return (
     <MapContainer
@@ -176,29 +329,23 @@ export default function StationMap({ stations, moves = [] }) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       
-      {/* Draw routes */}
-      {moves.map((move, idx) => {
-        const from = stationLookup.get(move.from_station_id)
-        const to = stationLookup.get(move.to_station_id)
-        if (!from || !to) return null
-        const isCompleted = idx < activeMoveIndex
-        const isActive = idx === activeMoveIndex && isAnimating
-        const color = move.vehicle_type === 'box_truck' ? '#EF4444' : move.vehicle_type === 'light_truck' ? '#3B82F6' : '#10B981'
-
+      {/* Active route polyline */}
+      {currentMove && (() => {
+        const key = getMoveKey(currentMove, activeMoveIndex)
+        const routePoints = routeCache[key]
+        if (!routePoints || routePoints.length < 2) return null
+        const color = getVehicleColor(currentMove)
+        const isCompleted = progress >= 100
         return (
           <Polyline
-            key={`${move.from_station_id}-${move.to_station_id}-${idx}`}
-            positions={[
-              [from.lat, from.lng],
-              [to.lat, to.lng]
-            ]}
+            key={`active-route-${key}`}
+            positions={routePoints}
             color={color}
-            weight={isActive ? 4 : 2}
-            opacity={isCompleted ? 0.25 : isActive ? 0.8 : 0.4}
-            dashArray={isCompleted ? '6, 12' : null}
+            weight={5}
+            opacity={isCompleted ? 0.4 : 0.85}
           />
         )
-      })}
+      })()}
 
       {/* Animated vehicle marker */}
       {vehiclePosition && currentMove && (
@@ -226,6 +373,10 @@ export default function StationMap({ stations, moves = [] }) {
         const isLoadingStation = currentMove && station.id === currentMove.from_station_id && phase === 'loading'
         const isUnloadingStation = currentMove && station.id === currentMove.to_station_id && phase === 'unloading'
 
+        const before = station.before_optimization_bikes ?? station.current_bikes
+        const after = station.current_bikes
+        const delta = after - before
+
         return (
           <Marker
             key={station.id}
@@ -237,8 +388,8 @@ export default function StationMap({ stations, moves = [] }) {
                 <h4 className="font-bold text-lg mb-2">{station.name}</h4>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">🚲 Current Bikes:</span>
-                    <span className="font-semibold">{station.current_bikes}</span>
+                    <span className="text-gray-600">🚲 Bikes Before:</span>
+                    <span className="font-semibold">{before}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">📊 Capacity:</span>
@@ -263,7 +414,14 @@ export default function StationMap({ stations, moves = [] }) {
                   {phase !== 'idle' && (
                     <div className="flex justify-between border-t pt-1 mt-2">
                       <span className="text-gray-600">After Optimization:</span>
-                      <span className="font-semibold">{station.current_bikes} bikes</span>
+                      <span className="font-semibold">
+                        {after} bikes
+                        {delta !== 0 && (
+                          <span className={`ml-2 font-bold ${delta > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            ({delta > 0 ? '+' : ''}{delta})
+                          </span>
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -272,6 +430,9 @@ export default function StationMap({ stations, moves = [] }) {
           </Marker>
         )
       })}
+      
+      {/* Render children (for overlays like clustering) */}
+      {children}
     </MapContainer>
   )
 }
