@@ -94,37 +94,7 @@ npm run dev              # Frontend (port 5173)
 python main.py          # Backend (port 8000)
 ```
 
-## Development Roadmap
 
-### Phase 1: Foundation (Weeks 1-2)
-- [ ] Data ingestion and cleaning pipeline
-- [ ] EDA notebooks for pattern discovery
-- [ ] Basic station map visualization
-- [ ] Database schema design
-
-### Phase 2: Core Optimization (Weeks 3-4)
-- [ ] MILP model implementation
-- [ ] Surplus/deficit calculation engine
-- [ ] Vehicle routing algorithm
-- [ ] Basic API endpoints
-
-### Phase 3: Interactive Features (Weeks 5-6)
-- [ ] Dynamic simulation interface
-- [ ] Constraint configuration UI
-- [ ] Real-time optimization results
-- [ ] Cost/penalty analytics dashboard
-
-### Phase 4: Advanced Features (Weeks 7-8)
-- [ ] AI operations agent integration
-- [ ] Demand forecasting models
-- [ ] What-if analysis tools
-- [ ] Scenario replay functionality
-
-### Phase 5: Polish & Testing (Weeks 9-10)
-- [ ] Performance optimization
-- [ ] Comprehensive testing
-- [ ] Documentation completion
-- [ ] Demo preparation
 
 ## API Endpoints
 
