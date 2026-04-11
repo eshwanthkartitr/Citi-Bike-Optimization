@@ -36,6 +36,14 @@ _vehicles_db = {
         "cost_per_trip": 1700.0,
         "icon": "📦",
         "available_count": 2
+    },
+    "mini_bike": {
+        "id": "mini_bike",
+        "name": "Mini Bike",
+        "capacity": 5,
+        "cost_per_trip": 120.0,
+        "icon": "🏍️",
+        "available_count": 6
     }
 }
 

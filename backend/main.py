@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
 
-from routers import optimization, stations, analytics, vehicles, comparison
+from routers import optimization, stations, analytics, vehicles, comparison, clustering, parameters, stats
 from config.settings import settings
 from utils.logger import setup_logger
 
@@ -45,6 +45,9 @@ app.include_router(comparison.router, prefix="/api/compare", tags=["comparison"]
 app.include_router(stations.router, prefix="/api/stations", tags=["stations"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(vehicles.router, prefix="/api/vehicles", tags=["vehicles"])
+app.include_router(clustering.router, prefix="/api", tags=["clustering"])
+app.include_router(parameters.router, prefix="/api", tags=["parameters"])
+app.include_router(stats.router, prefix="/api", tags=["stats"])
 
 
 @app.get("/")

@@ -41,29 +41,62 @@ class AdvancedRebalancingOptimizer:
         
         # Use provided vehicle configs or fall back to settings
         if vehicle_configs:
-            self.vehicles = vehicle_configs
+            self.vehicles = self._normalize_vehicle_configs(vehicle_configs)
         else:
             # Default vehicle configurations
-            self.vehicles = {
+            self.vehicles = self._normalize_vehicle_configs({
+                'mini_bike': {
+                    'name': 'Mini Bike',
+                    'capacity': 5,
+                    'cost_per_trip': 120.0,
+                    'icon': '🏍️',
+                    'available_count': 6
+                },
                 'mini_van': {
                     'name': 'Mini Van',
                     'capacity': settings.MINI_VAN_CAPACITY,
                     'cost_per_trip': settings.MINI_VAN_COST_PER_TRIP,
-                    'icon': '🚐'
+                    'icon': '🚐',
+                    'available_count': 5
                 },
                 'light_truck': {
                     'name': 'Light Truck',
                     'capacity': settings.LIGHT_TRUCK_CAPACITY,
                     'cost_per_trip': settings.LIGHT_TRUCK_COST_PER_TRIP,
-                    'icon': '🚚'
+                    'icon': '🚚',
+                    'available_count': 3
                 },
                 'box_truck': {
                     'name': 'Box Truck / Bulk Van',
                     'capacity': settings.BOX_TRUCK_CAPACITY,
                     'cost_per_trip': settings.BOX_TRUCK_COST_PER_TRIP,
-                    'icon': '📦'
+                    'icon': '📦',
+                    'available_count': 2
                 }
+            })
+
+    def _normalize_vehicle_configs(self, vehicle_configs: Dict) -> Dict[str, Dict]:
+        """Ensure vehicle configurations include required fields and consistent types"""
+        normalized = {}
+        for vehicle_id, config in vehicle_configs.items():
+            if not config:
+                continue
+            name = config.get('name', vehicle_id.replace('_', ' ').title())
+            capacity = int(config.get('capacity', 0))
+            if capacity <= 0:
+                # Skip unusable vehicle definitions
+                continue
+            cost = float(config.get('cost_per_trip', config.get('cost_per_mile', 0.0)))
+            icon = config.get('icon', '🚚')
+            available = max(0, int(config.get('available_count', 1)))
+            normalized[vehicle_id] = {
+                'name': name,
+                'capacity': capacity,
+                'cost_per_trip': cost,
+                'icon': icon,
+                'available_count': available
             }
+        return normalized
     
     def calculate_distance_matrix(self, stations: List[StationStatus]):
         """Calculate distances between all station pairs with caching"""
@@ -139,7 +172,27 @@ class AdvancedRebalancingOptimizer:
         
         # Decision variables
         station_ids = [s.station_id for s in stations]
-        vehicle_types = list(self.vehicles.keys())
+        vehicle_types = [
+            vehicle_id
+            for vehicle_id, config in self.vehicles.items()
+            if config.get('available_count', 0) > 0
+        ]
+
+        if not vehicle_types:
+            logger.warning("⚠️ No vehicles available based on current configuration. Returning no-move solution.")
+            return OptimizationResult(
+                total_cost=0.0,
+                total_penalty=0.0,
+                objective_value=0.0,
+                moves=[],
+                stations_served=0,
+                total_bikes_moved=0,
+                total_distance=0.0,
+                fairness_score=0.0,
+                execution_time=0.0,
+                solver_status="No Vehicles Available",
+                stations=self.stations
+            )
         
         # x[j,i,v] = number of bikes moved from surplus station j to deficit station i using vehicle v
         x = pulp.LpVariable.dicts(
@@ -260,6 +313,18 @@ class AdvancedRebalancingOptimizer:
                     pulp.lpSum([z[(j.station_id, i.station_id, v)] for v in vehicle_types]) <= 1,
                     f"Single_Vehicle_{j.station_id}_{i.station_id}"
                 )
+
+        # 7. Vehicle availability constraints
+        for v in vehicle_types:
+            available_trips = max(0, int(self.vehicles[v].get('available_count', 0)))
+            problem += (
+                pulp.lpSum([
+                    z[(j.station_id, i.station_id, v)]
+                    for j in surplus_stations
+                    for i in deficit_stations
+                ]) <= available_trips,
+                f"Vehicle_Count_{v}"
+            )
         
         # Solve
         logger.info("🔧 Solving MILP problem...")
@@ -397,7 +462,7 @@ class AdvancedRebalancingOptimizer:
                             distance=distance,
                             cost=cost,
                             sequence=sequence,
-                            vehicle_icon=self.vehicles[v]['icon']
+                            vehicle_icon=self.vehicles[v].get('icon', '🚚')
                         ))
                         
                         total_bikes_moved += bikes

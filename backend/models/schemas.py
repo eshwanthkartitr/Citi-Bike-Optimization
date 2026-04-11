@@ -12,6 +12,7 @@ class VehicleType(str, Enum):
     MINI_VAN = "mini_van"
     LIGHT_TRUCK = "light_truck"
     BOX_TRUCK = "box_truck"
+    MINI_BIKE = "mini_bike"
 
 
 class StationStatus(BaseModel):
